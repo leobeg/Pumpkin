@@ -5,13 +5,14 @@ use std::cmp::max;
 use std::collections::HashMap;
 use std::ops::Index;
 use thiserror::Error;
-
+use pumpkin_core::math::position::WorldPosition;
 use crate::{
     block::BlockState,
     coordinates::{ChunkRelativeBlockCoordinates, Height},
     level::SaveFile,
     WORLD_HEIGHT,
 };
+use crate::block::block_entity::BlockEntity;
 
 pub mod anvil;
 
@@ -55,6 +56,7 @@ pub enum CompressionError {
 
 pub struct ChunkData {
     pub blocks: ChunkBlocks,
+    pub block_entities: HashMap<WorldPosition, BlockEntity>,
     pub position: Vector2<i32>,
 }
 pub struct ChunkBlocks {
@@ -107,6 +109,9 @@ struct ChunkNbt {
 
     #[serde(rename = "sections")]
     sections: Vec<ChunkSection>,
+
+    #[serde(rename = "block_entities")]
+    block_entities: Vec<BlockEntity>,
 
     heightmaps: ChunkHeightmaps,
 }
@@ -309,10 +314,17 @@ impl ChunkData {
                 }
             }
         }
+        
+        let mut block_entities: HashMap<WorldPosition, BlockEntity> = HashMap::new();
+        for block_entity in chunk_data.block_entities {
+            let position = WorldPosition::from_xyz(block_entity.x, block_entity.y, block_entity.z);
+            block_entities.insert(position, block_entity);
+        }
 
         Ok(ChunkData {
             blocks,
             position: at,
+            block_entities,
         })
     }
 }
