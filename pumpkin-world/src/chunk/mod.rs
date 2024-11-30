@@ -320,6 +320,8 @@ impl ChunkData {
             let position = WorldPosition::from_xyz(block_entity.x, block_entity.y, block_entity.z);
             block_entities.insert(position, block_entity);
         }
+        
+        dbg!(&block_entities);
 
         Ok(ChunkData {
             blocks,
