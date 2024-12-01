@@ -18,30 +18,28 @@ pub struct BlockEntity {
     // #[serde(rename = "id")]
     // pub id: String,
     #[serde(flatten)]
-    pub data: BlockEntityType
+    pub data: BlockEntityType,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "id")]
 pub enum BlockEntityType {
-    
     #[serde(rename = "minecraft:jukebox")]
     Jukebox {
         #[serde(rename = "RecordItem")]
-        record_item: RecordItem,
-        ticks_since_song_started: i64,
+        record_item: Option<RecordItem>,
+        ticks_since_song_started: Option<i64>,
     },
-    
-    #[serde(other)]
-    Unknown
-}
 
+    #[serde(other)]
+    Unknown,
+}
 
 /// --- Entity specific structs ---
 
 /// Jukebox record item
 #[derive(Debug, Clone, Deserialize)]
 pub struct RecordItem {
-    count: u8,
-    id: String,
+    pub count: u8,
+    pub id: String,
 }

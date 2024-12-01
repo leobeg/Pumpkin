@@ -21,6 +21,23 @@ pub fn get_item_by_id<'a>(id: u16) -> Option<&'a Item> {
     None
 }
 
+pub fn get_record_item(name: &str) -> Option<&Item> {
+    let item = ITEMS.iter().find(|item| {
+        item.1
+            .components
+            .jukebox_playable
+            .as_ref()
+            .map(|playable| playable.song == name.to_string())
+            .unwrap_or(false)
+    });
+
+    if let Some(item) = item {
+        return Some(item.1);
+    }
+
+    None
+}
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct Item {
     pub id: u16,

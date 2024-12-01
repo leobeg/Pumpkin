@@ -35,6 +35,7 @@ use pumpkin_protocol::{
     ClientPacket, VarInt,
 };
 use pumpkin_registry::DimensionType;
+use pumpkin_world::block::block_entity::BlockEntity;
 use pumpkin_world::chunk::ChunkData;
 use pumpkin_world::level::Level;
 use pumpkin_world::{
@@ -51,7 +52,6 @@ use tokio::{
     sync::{mpsc, RwLock},
     task::JoinHandle,
 };
-use pumpkin_world::block::block_entity::BlockEntity;
 use worldborder::Worldborder;
 
 pub mod bossbar;
@@ -874,21 +874,33 @@ impl World {
         let id = self.get_block_state_id(position).await?;
         get_block_and_state_by_state_id(id).ok_or(GetBlockError::InvalidBlockId)
     }
-    
-    pub async fn get_block_entity(&self, position: WorldPosition) -> Option<&BlockEntity> {
-        let chunk_coordinate = position.chunk_and_chunk_relative_position().0;
-        let chunk = self.receive_chunk(chunk_coordinate).await;
-        
-        chunk.read().await.block_entities.get(&position)
-    }
-    
-    pub async fn create_or_update_block_entity(&self, position: WorldPosition, block_entity: BlockEntity) {
+
+    pub async fn get_block_entity(&self, position: &WorldPosition) -> Option<BlockEntity> {
         let chunk_coordinate = position.chunk_and_chunk_relative_position().0;
         let chunk = self.receive_chunk(chunk_coordinate).await;
 
-        chunk.write().await.block_entities.insert(position, block_entity);
+        let block_entity = chunk.read().await.block_entities.get(position).cloned();
+
+        block_entity
     }
-    
+
+    pub async fn create_or_update_block_entity(
+        &self,
+        position: WorldPosition,
+        block_entity: BlockEntity,
+    ) {
+        let chunk_coordinate = position.chunk_and_chunk_relative_position().0;
+        let chunk = self.receive_chunk(chunk_coordinate).await;
+
+        chunk
+            .write()
+            .await
+            .block_entities
+            .insert(position, block_entity);
+        
+        
+    }
+
     pub async fn remove_block_entity(&self, position: WorldPosition) {
         let chunk_coordinate = position.chunk_and_chunk_relative_position().0;
         let chunk = self.receive_chunk(chunk_coordinate).await;
