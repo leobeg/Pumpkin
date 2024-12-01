@@ -32,6 +32,7 @@ pub struct TextComponent<'a> {
     #[serde(flatten)]
     pub style: Style<'a>,
     /// Extra text components
+    #[serde(default)]
     pub extra: Vec<TextComponent<'a>>,
 }
 

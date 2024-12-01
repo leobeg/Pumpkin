@@ -59,7 +59,7 @@ pub struct Server {
     /// Manages authentication with a authentication server, if enabled.
     pub auth_client: Option<reqwest::Client>,
     /// The server's custom bossbars
-    pub bossbars: Mutex<CustomBossbars>,
+    pub bossbars: Mutex<CustomBossbars<'static>>,
 }
 
 impl Server {

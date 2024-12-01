@@ -32,18 +32,18 @@ pub enum BossbarFlags {
 }
 
 #[derive(Clone)]
-pub struct Bossbar {
+pub struct Bossbar<'a> {
     pub uuid: Uuid,
-    pub title: String,
+    pub title: TextComponent<'a>,
     pub health: f32,
     pub color: BossbarColor,
     pub division: BossbarDivisions,
     pub flags: BossbarFlags,
 }
 
-impl Bossbar {
+impl<'a> Bossbar<'a> {
     #[must_use]
-    pub fn new(title: String) -> Bossbar {
+    pub fn new(title: TextComponent<'a>) -> Bossbar<'a> {
         let uuid = Uuid::new_v4();
 
         Self {
@@ -59,11 +59,11 @@ impl Bossbar {
 
 /// Extension of the player to send the manage the bossbar
 impl Player {
-    pub async fn send_bossbar(&self, bossbar: &Bossbar) {
+    pub async fn send_bossbar(&self, bossbar: &Bossbar<'_>) {
         // Maybe this section could be implemented. feel free to change
         let bossbar = bossbar.clone();
         let boss_action = BosseventAction::Add {
-            title: TextComponent::text_string(bossbar.title),
+            title: bossbar.title.clone(),
             health: bossbar.health,
             color: (bossbar.color as u8).into(),
             division: (bossbar.division as u8).into(),
@@ -87,8 +87,8 @@ impl Player {
         self.client.send_packet(&packet).await;
     }
 
-    pub async fn update_bossbar_title(&self, uuid: Uuid, title: String) {
-        let boss_action = BosseventAction::UpdateTile(TextComponent::text_string(title));
+    pub async fn update_bossbar_title(&self, uuid: Uuid, title: TextComponent<'_>) {
+        let boss_action = BosseventAction::UpdateTile(title);
 
         let packet = CBossEvent::new(uuid, boss_action);
         self.client.send_packet(&packet).await;

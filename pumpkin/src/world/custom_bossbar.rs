@@ -2,6 +2,7 @@ use crate::command::args::GetCloned;
 use crate::entity::player::Player;
 use crate::server::Server;
 use crate::world::bossbar::{Bossbar, BossbarColor, BossbarDivisions};
+use pumpkin_core::text::TextComponent;
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
@@ -17,19 +18,19 @@ pub enum BossbarUpdateError {
 
 /// Representing the stored custom boss bars from level.dat
 #[derive(Clone)]
-pub struct CustomBossbar {
+pub struct CustomBossbar<'a> {
     pub namespace: String,
-    pub bossbar_data: Bossbar,
+    pub bossbar_data: Bossbar<'a>,
     pub max: u32,
     pub value: u32,
     pub visible: bool,
     pub player: Vec<Uuid>,
 }
 
-impl CustomBossbar {
+impl<'a> CustomBossbar<'a> {
     #[deny(clippy::new_without_default)]
     #[must_use]
-    pub fn new(namespace: String, bossbar_data: Bossbar) -> Self {
+    pub fn new(namespace: String, bossbar_data: Bossbar<'a>) -> CustomBossbar<'a> {
         Self {
             namespace,
             bossbar_data,
@@ -41,19 +42,19 @@ impl CustomBossbar {
     }
 }
 
-pub struct CustomBossbars {
-    pub custom_bossbars: HashMap<String, CustomBossbar>,
+pub struct CustomBossbars<'a> {
+    pub custom_bossbars: HashMap<String, CustomBossbar<'a>>,
 }
 
-impl Default for CustomBossbars {
+impl<'a> Default for CustomBossbars<'a> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl CustomBossbars {
+impl<'a> CustomBossbars<'a> {
     #[must_use]
-    pub fn new() -> CustomBossbars {
+    pub fn new() -> CustomBossbars<'a> {
         Self {
             custom_bossbars: HashMap::new(),
         }
@@ -73,14 +74,14 @@ impl CustomBossbars {
         None
     }
 
-    pub fn create_bossbar(&mut self, namespace: String, bossbar_data: Bossbar) {
+    pub fn create_bossbar(&mut self, namespace: String, bossbar_data: Bossbar<'a>) {
         self.custom_bossbars.insert(
             namespace.clone(),
             CustomBossbar::new(namespace, bossbar_data),
         );
     }
 
-    pub fn replace_bossbar(&mut self, resource_location: &str, bossbar_data: CustomBossbar) {
+    pub fn replace_bossbar(&mut self, resource_location: &str, bossbar_data: CustomBossbar<'a>) {
         self.custom_bossbars
             .insert(resource_location.to_string(), bossbar_data);
     }
@@ -236,7 +237,7 @@ impl CustomBossbars {
         &mut self,
         server: &Server,
         resource_location: String,
-        new_title: String,
+        new_title: TextComponent<'static>,
     ) -> Result<(), BossbarUpdateError> {
         let bossbar = self.custom_bossbars.get_mut(&resource_location);
         if let Some(bossbar) = bossbar {
@@ -246,7 +247,7 @@ impl CustomBossbars {
                 )));
             }
 
-            bossbar.bossbar_data.title = new_title;
+            bossbar.bossbar_data.title = new_title.clone();
 
             if !bossbar.visible {
                 return Ok(());

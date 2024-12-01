@@ -5,11 +5,9 @@ use crate::command::args::arg_bounded_num::BoundedNumArgumentConsumer;
 use crate::command::args::arg_players::PlayersArgumentConsumer;
 use crate::command::args::arg_resource_location::ResourceLocationArgumentConsumer;
 use crate::command::args::arg_simple::SimpleArgConsumer;
-use crate::command::args::{
-    Arg, ConsumedArgs, DefaultNameArgConsumer, FindArg, FindArgDefaultName,
-};
+use crate::command::args::arg_textcomponent::TextComponentArgConsumer;
+use crate::command::args::{ConsumedArgs, DefaultNameArgConsumer, FindArg, FindArgDefaultName};
 use crate::command::dispatcher::CommandError;
-use crate::command::dispatcher::CommandError::InvalidConsumption;
 use crate::command::tree::CommandTree;
 use crate::command::tree_builder::{argument, argument_default_name, literal};
 use crate::command::{CommandExecutor, CommandSender};
@@ -61,9 +59,7 @@ impl CommandExecutor for BossbarAddExecuter {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let namespace = NON_AUTOCOMPLETE_CONSUMER.find_arg_default_name(args)?;
-        let Some(Arg::Simple(name)) = args.get(ARG_NAME) else {
-            return Err(InvalidConsumption(Some(ARG_NAME.into())));
-        };
+        let component = TextComponentArgConsumer::find_arg(args, ARG_NAME)?;
 
         if server.bossbars.lock().await.has_bossbar(namespace) {
             send_error_message(
@@ -74,12 +70,20 @@ impl CommandExecutor for BossbarAddExecuter {
             return Ok(());
         }
 
-        let bossbar = Bossbar::new(name.clone());
+        let bossbar = Bossbar::new(component);
         server
             .bossbars
             .lock()
             .await
             .create_bossbar(namespace.to_string(), bossbar.clone());
+
+        sender
+            .send_message(
+                TextComponent::text("Created custom bossbar [")
+                    .add_child(bossbar.title)
+                    .add_child(TextComponent::text("]")),
+            )
+            .await;
 
         Ok(())
     }
@@ -96,8 +100,9 @@ impl CommandExecutor for BossbarGetExecuter {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let namespace = AUTOCOMPLETE_CONSUMER.find_arg_default_name(args)?;
+        let bossbars = server.bossbars.lock().await;
 
-        let Some(bossbar) = server.bossbars.lock().await.get_bossbar(namespace) else {
+        let Some(bossbar) = bossbars.get_bossbar(namespace) else {
             send_error_message(
                 sender,
                 format!("No bossbar exists with the ID '{namespace}'"),
@@ -108,36 +113,30 @@ impl CommandExecutor for BossbarGetExecuter {
 
         match self.0 {
             CommandValueGet::Max => {
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] has a maximum of {}",
-                        bossbar.bossbar_data.title, bossbar.max
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("has a maximum of {}", bossbar.max),
                 )
                 .await;
                 return Ok(());
             }
             CommandValueGet::Players => {}
             CommandValueGet::Value => {
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] has a value of {}",
-                        bossbar.bossbar_data.title, bossbar.value
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("has a value of {}", bossbar.value),
                 )
                 .await;
                 return Ok(());
             }
             CommandValueGet::Visible => {
                 let state = if bossbar.visible { "shown" } else { "hidden" };
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] is currently {state}",
-                        bossbar.bossbar_data.title
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("is currently {state}"),
                 )
                 .await;
                 return Ok(());
@@ -158,30 +157,32 @@ impl CommandExecutor for BossbarListExecuter {
         server: &Server,
         _args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
-        let bossbars = server.bossbars.lock().await.get_all_bossbars();
+        let bossbars = server.bossbars.lock().await;
+        let bossbars = bossbars.get_all_bossbars();
         let Some(bossbars) = bossbars else {
             send_success_message(sender, "There are no custom bossbars active".to_string()).await;
             return Ok(());
         };
 
-        let mut bossbars_string = String::new();
+        let mut bossbars_text = TextComponent::text_string(format!(
+            "There are {} custom bossbar(s) active: ",
+            bossbars.len()
+        ));
         for (i, bossbar) in bossbars.iter().enumerate() {
             if i == 0 {
-                bossbars_string += format!("[{}]", bossbar.bossbar_data.title).as_str();
+                bossbars_text = bossbars_text
+                    .add_child(TextComponent::text("["))
+                    .add_child(bossbar.bossbar_data.title.clone())
+                    .add_child(TextComponent::text("]"));
             } else {
-                bossbars_string += format!(", [{}]", bossbar.bossbar_data.title).as_str();
+                bossbars_text = bossbars_text
+                    .add_child(TextComponent::text(", ["))
+                    .add_child(bossbar.bossbar_data.title.clone())
+                    .add_child(TextComponent::text("]"));
             }
         }
 
-        send_success_message(
-            sender,
-            format!(
-                "There are {} custom bossbar(s) active: {}",
-                bossbars.len(),
-                bossbars_string
-            ),
-        )
-        .await;
+        sender.send_message(bossbars_text).await;
         Ok(())
     }
 }
@@ -237,8 +238,8 @@ impl CommandExecutor for BossbarSetExecuter {
         args: &ConsumedArgs<'a>,
     ) -> Result<(), CommandError> {
         let namespace = AUTOCOMPLETE_CONSUMER.find_arg_default_name(args)?;
-
-        let Some(bossbar) = server.bossbars.lock().await.get_bossbar(namespace) else {
+        let bossbars = server.bossbars.lock().await;
+        let Some(bossbar) = bossbars.get_bossbar(namespace) else {
             handle_bossbar_error(
                 sender,
                 BossbarUpdateError::InvalidResourceLocation(namespace.to_string()),
@@ -263,12 +264,10 @@ impl CommandExecutor for BossbarSetExecuter {
                         return Ok(());
                     }
                 }
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] has changed color",
-                        bossbar.bossbar_data.title
-                    ),
+                    bossbar.bossbar_data.title,
+                    String::from("has changed color"),
                 )
                 .await;
                 Ok(())
@@ -302,25 +301,21 @@ impl CommandExecutor for BossbarSetExecuter {
                     }
                 }
 
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] has changed maximum to {}",
-                        bossbar.bossbar_data.title, max_value
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("has changed maximum to {}", max_value),
                 )
                 .await;
                 Ok(())
             }
             CommandValueSet::Name => {
-                let Some(Arg::Simple(name)) = args.get(ARG_NAME) else {
-                    return Err(InvalidConsumption(Some(ARG_NAME.into())));
-                };
+                let component = TextComponentArgConsumer::find_arg(args, ARG_NAME)?;
                 match server
                     .bossbars
                     .lock()
                     .await
-                    .update_name(server, namespace.to_string(), name.clone())
+                    .update_name(server, namespace.to_string(), component.clone())
                     .await
                 {
                     Ok(()) => {}
@@ -330,7 +325,7 @@ impl CommandExecutor for BossbarSetExecuter {
                     }
                 }
 
-                send_success_message(sender, format!("Custom bossbar [{name}] has been renamed"))
+                send_prefix_success_message(sender, component, String::from("has been renamed"))
                     .await;
                 Ok(())
             }
@@ -349,12 +344,10 @@ impl CommandExecutor for BossbarSetExecuter {
                             return Ok(());
                         }
                     }
-                    send_success_message(
+                    send_prefix_success_message(
                         sender,
-                        format!(
-                            "Custom bossbar [{}] no longer has any players",
-                            bossbar.bossbar_data.title
-                        ),
+                        bossbar.bossbar_data.title,
+                        String::from("no longer has any players"),
                     )
                     .await;
                     return Ok(());
@@ -385,13 +378,10 @@ impl CommandExecutor for BossbarSetExecuter {
                     .map(|player| player.gameprofile.name.clone())
                     .collect();
 
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] now has {count} player(s): {}",
-                        bossbar.bossbar_data.title,
-                        player_names.join(", ")
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("now has {count} player(s): {}", player_names.join(", ")),
                 )
                 .await;
                 Ok(())
@@ -411,12 +401,10 @@ impl CommandExecutor for BossbarSetExecuter {
                         return Ok(());
                     }
                 }
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] has changed style",
-                        bossbar.bossbar_data.title
-                    ),
+                    bossbar.bossbar_data.title,
+                    String::from("has changed style"),
                 )
                 .await;
                 Ok(())
@@ -445,12 +433,10 @@ impl CommandExecutor for BossbarSetExecuter {
                     }
                 }
 
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] has changed value to {}",
-                        bossbar.bossbar_data.title, value
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("changed value to {}", value),
                 )
                 .await;
                 Ok(())
@@ -473,12 +459,10 @@ impl CommandExecutor for BossbarSetExecuter {
                 }
 
                 let state = if visibility { "visible" } else { "hidden" };
-                send_success_message(
+                send_prefix_success_message(
                     sender,
-                    format!(
-                        "Custom bossbar [{}] is now {state}",
-                        bossbar.bossbar_data.title
-                    ),
+                    bossbar.bossbar_data.title,
+                    format!("is now {state}"),
                 )
                 .await;
                 Ok(())
@@ -495,13 +479,11 @@ static VALUE_CONSUMER: BoundedNumArgumentConsumer<i32> =
 
 pub fn init_command_tree<'a>() -> CommandTree<'a> {
     CommandTree::new(NAMES, DESCRIPTION)
-        .with_child(
-            literal("add").with_child(
-                argument_default_name(&NON_AUTOCOMPLETE_CONSUMER).with_child(
-                    argument(ARG_NAME, &SimpleArgConsumer).execute(&BossbarAddExecuter),
-                ),
+        .with_child(literal("add").with_child(
+            argument_default_name(&NON_AUTOCOMPLETE_CONSUMER).with_child(
+                argument(ARG_NAME, &TextComponentArgConsumer).execute(&BossbarAddExecuter),
             ),
-        )
+        ))
         .with_child(
             literal("get").with_child(
                 argument_default_name(&AUTOCOMPLETE_CONSUMER)
@@ -572,10 +554,24 @@ pub fn init_command_tree<'a>() -> CommandTree<'a> {
         )
 }
 
+fn bossbar_prefix(title: TextComponent, trailing: String) -> TextComponent {
+    TextComponent::text("Custom bossbar [")
+        .add_child(title)
+        .add_child(TextComponent::text_string(format!("] {trailing}")))
+}
+
 async fn send_success_message(sender: &CommandSender<'_>, message: String) {
     sender
         .send_message(TextComponent::text(message.as_str()))
         .await;
+}
+
+async fn send_prefix_success_message(
+    sender: &CommandSender<'_>,
+    title: TextComponent<'_>,
+    message: String,
+) {
+    sender.send_message(bossbar_prefix(title, message)).await;
 }
 
 async fn send_error_message(sender: &CommandSender<'_>, message: String) {
