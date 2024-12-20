@@ -2,7 +2,7 @@ use std::{
     num::Wrapping,
     ops::{AddAssign, SubAssign},
 };
-
+use std::collections::HashMap;
 use dashmap::{DashMap, Entry};
 use num_traits::Zero;
 use pumpkin_core::math::{vector2::Vector2, vector3::Vector3};
@@ -77,6 +77,7 @@ impl<B: BiomeGenerator, T: TerrainGenerator> WorldGenerator for TestGenerator<B,
         ChunkData {
             blocks,
             position: at,
+            block_entities: HashMap::new(),
         }
     }
 }

@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use noise::{NoiseFn, Perlin};
 use pumpkin_core::math::vector2::Vector2;
 
@@ -75,6 +76,7 @@ impl<B: BiomeGenerator, T: PerlinTerrainGenerator> WorldGenerator for GenericGen
         ChunkData {
             blocks,
             position: at,
+            block_entities: HashMap::new(),
         }
     }
 }

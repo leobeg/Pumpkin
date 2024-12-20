@@ -5,7 +5,7 @@ use crate::math::vector2::Vector2;
 use num_traits::Euclid;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 /// Aka Block Position
 pub struct WorldPosition(pub Vector3<i32>);
 
@@ -26,6 +26,10 @@ impl WorldPosition {
             y: self.0.y,
         };
         (chunk_coordinate, relative)
+    }
+
+    pub fn from_xyz(x: i32, y: i32, z: i32) -> Self {
+        Self(Vector3::new(x, y, z))
     }
 }
 impl Serialize for WorldPosition {

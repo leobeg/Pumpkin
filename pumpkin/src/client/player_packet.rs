@@ -39,6 +39,7 @@ use pumpkin_protocol::{
 use pumpkin_world::block::{block_registry::get_block_by_item, BlockFace};
 use pumpkin_world::item::item_registry::get_item_by_id;
 use thiserror::Error;
+use pumpkin_protocol::client::play::CBlockUpdate;
 
 fn modulus(a: f32, b: f32) -> f32 {
     ((a % b) + b) % b
@@ -652,6 +653,8 @@ impl Player {
             // TODO: maybe log?
             return Err(BlockPlacingError::BlockOutOfReach.into());
         }
+        
+        log::info!("Test");
 
         if let Some(face) = BlockFace::from_i32(use_item_on.face.0) {
             let inventory = self.inventory().lock().await;
@@ -672,6 +675,9 @@ impl Player {
                         match result {
                             BlockActionResult::Continue => {}
                             BlockActionResult::Consume => {
+                                self.client
+                                    .send_packet(&CAcknowledgeBlockChange::new(use_item_on.sequence))
+                                    .await;
                                 return Ok(());
                             }
                         }
@@ -687,6 +693,9 @@ impl Player {
                         let item_slot = inventory.held_item_mut();
                         // This should never be possible
                         let Some(item_stack) = item_slot else {
+                            self.client
+                                .send_packet(&CAcknowledgeBlockChange::new(use_item_on.sequence))
+                                .await;
                             return Err(BlockPlacingError::InventoryInvalid.into());
                         };
                         item_stack.item_count -= 1;
@@ -706,6 +715,9 @@ impl Player {
                         let previous_block_state = world.get_block_state(world_pos).await?;
 
                         if !previous_block_state.replaceable {
+                            self.client
+                                .send_packet(&CAcknowledgeBlockChange::new(use_item_on.sequence))
+                                .await;
                             return Ok(());
                         }
 
@@ -732,21 +744,26 @@ impl Player {
                             .on_placed(block, self, world_pos, server)
                             .await;
                     }
-
-                    self.client
-                        .send_packet(&CAcknowledgeBlockChange::new(use_item_on.sequence))
-                        .await;
                 }
             } else {
+                self.client
+                    .send_packet(&CAcknowledgeBlockChange::new(use_item_on.sequence))
+                    .await;
                 drop(inventory);
                 let block = world.get_block(location).await;
                 if let Ok(block) = block {
                     server
                         .block_manager
-                        .on_use(block, self, location, server)
+                        .on_use(block, self, location.clone(), server)
                         .await;
                 }
+                let block_state = world.get_block_state_id(location).await.unwrap();
+                self.client
+                    .send_packet(&CBlockUpdate::new(&location, VarInt::from(block_state as u32)))
+                    .await;
             }
+
+            
 
             Ok(())
         } else {
